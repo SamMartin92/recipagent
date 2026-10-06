@@ -10,9 +10,46 @@
  *
  * Learn more at https://developers.cloudflare.com/workers/
  */
+const MODEL = "claude-haiku-4-5";
+
+type ChatRequest = { message: string };
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
-		return new Response("Hello World ya cunt");
+		if (request.method !== "POST") {
+      		return new Response("Send a POST request", { status: 405 });
+    }	
+	const { message } = await request.json<ChatRequest>();
+
+    if (typeof message !== "string") {
+      return new Response('Body must be { "message": "..." }', { status: 400 });
+    }
+
+	const llmResponse = await fetch(
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": env.ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "anthropic-workspace-id": env.ANTHROPIC_WORKSPACE_ID,
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1024,
+          system: "You are a helpful home-cooking assistant. Suggest recipes using the ingredients the user has.",
+          messages: [{ role: "user", content: message }],
+      })
+    });
+    
+
+	if (!llmResponse.ok) {
+      return new Response(await llmResponse.text(), { status: llmResponse.status });
+    }
+	const data = await llmResponse.json<any>();
+  const reply = data.content?.[0].text ?? "Empty response";
+
+    return Response.json({ reply });
 	},
 } satisfies ExportedHandler<Env>;
