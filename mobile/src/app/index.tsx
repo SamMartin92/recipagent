@@ -32,7 +32,7 @@ const STARTER_INGREDIENTS: Ingredient[] = [
   { name: "Feta", useCount: 0 },
 ];
 
-export default function PantryScreen() {
+export default function IngredientsScreen() {
   const [ingredients, setIngredients] = useState<Ingredient[]>(STARTER_INGREDIENTS);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newItem, setNewItem] = useState("");
@@ -109,7 +109,7 @@ export default function PantryScreen() {
         </ScrollView>
         <View style={styles.footer}>
           <Pressable style={styles.suggestButton} onPress={() => setReply(null)}>
-            <Text style={styles.suggestText}>Back to pantry</Text>
+            <Text style={styles.suggestText}>Back to ingredients</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -119,7 +119,7 @@ export default function PantryScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
-      <Text style={styles.title}>My Pantry</Text>
+      <Text style={styles.title}>foodbrɐin.</Text>
       <Text style={styles.subtitle}>Tap what you have</Text>
 
       <ScrollView

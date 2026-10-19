@@ -5,8 +5,6 @@ type ProxyResponse = { reply: string };
 
 export async function askForRecipe(ingredients: string[]): Promise<string> {
   const message = `I have ${ingredients.join(", ")}. Suggest a recipe I can make.`;
-  console.log("hello");
-  console.log("Calling", PROXY_URL, "with", message);
   const response = await fetch(PROXY_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
