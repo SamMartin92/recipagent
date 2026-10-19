@@ -11,7 +11,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { askForRecipe } from "../api/recipes";
+import { getSuggestions } from "../api/recipes";
+import { Suggestion } from "../types/recipe";
 
 // For now, ingredients live in memory and reset when the app reloads.
 // Later this list comes from SQLite (src/db/).
@@ -37,7 +38,7 @@ export default function IngredientsScreen() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newItem, setNewItem] = useState("");
   const [loading, setLoading] = useState(false);
-  const [reply, setReply] = useState<string | null>(null); // null = no recipe showing
+  const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null); // null = no recipe showing
 
   // Most-used first; ties sorted alphabetically.
   const sorted = [...ingredients].sort(
@@ -91,31 +92,40 @@ export default function IngredientsScreen() {
     setLoading(true);
 
     try {
-      const text = await askForRecipe(chosen);
-      setReply(text);
+      const list = await getSuggestions(chosen);
+      setSuggestions(list);
     } catch (err) {
-      Alert.alert("Couldn't get a recipe", String(err));
+      Alert.alert("Couldn't get suggestions", String(err));
     } finally {
       setLoading(false);
     }
   }
-  
-  if (reply !== null) {
+
+  if (suggestions !== null) {
     return (
-      <SafeAreaView style={styles.screen} edges={["top"]}>
-        <Text style={styles.title}>Suggestion</Text>
-        <ScrollView contentContainerStyle={styles.replyBox}>
-          <Text style={styles.replyText}>{reply}</Text>
-        </ScrollView>
-        <View style={styles.footer}>
-          <Pressable style={styles.suggestButton} onPress={() => setReply(null)}>
-            <Text style={styles.suggestText}>Back to ingredients</Text>
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <Text style={styles.title}>Suggestions</Text>
+      <ScrollView contentContainerStyle={styles.cardList}>
+        {suggestions.map((s, index) => (
+          <Pressable
+            key={index}
+            style={styles.card}
+            onPress={() => Alert.alert(s.title, "Full recipe coming next")}
+          >
+            <Text style={styles.cardTitle}>{s.title}</Text>
+            <Text style={styles.cardDescription}>{s.description}</Text>
+            <Text style={styles.cardMeta}>{s.minutes} min</Text>
           </Pressable>
-        </View>
-      </SafeAreaView>
+        ))}
+      </ScrollView>
+      <View style={styles.footer}>
+        <Pressable style={styles.suggestButton} onPress={() => setSuggestions(null)}>
+          <Text style={styles.suggestText}>Back to ingredients</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
     );
   }
-
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -234,7 +244,16 @@ const styles = StyleSheet.create({
   },
   suggestDisabled: { opacity: 0.4 },
   suggestText: { color: "#ffffff", fontSize: 16, fontWeight: "600" },
-  replyBox: { paddingVertical: 16 },
-  replyText: { fontSize: 16, lineHeight: 24, color: "#1a1a1a" },
+  cardList: { gap: 12, paddingVertical: 16 },
+  card: {
+    borderWidth: 1,
+    borderColor: "#d0d0d0",
+    borderRadius: 12,
+    padding: 16,
+    backgroundColor: "#f7f7f7",
+  },
+  cardTitle: { fontSize: 18, fontWeight: "600", color: "#1a1a1a", marginBottom: 4 },
+  cardDescription: { fontSize: 15, color: "#444444", marginBottom: 8 },
+  cardMeta: { fontSize: 13, color: "#2f7d4f", fontWeight: "600" },
 });
 
