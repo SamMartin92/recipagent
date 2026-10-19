@@ -48,6 +48,7 @@ export default {
       return new Response(await llmResponse.text(), { status: llmResponse.status });
     }
 	const data = await llmResponse.json<any>();
+
   const reply = data.content?.[0].text ?? "Empty response";
 
     return Response.json({ reply });

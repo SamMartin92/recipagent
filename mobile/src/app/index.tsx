@@ -1,99 +1,240 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { askForRecipe } from "../api/recipes";
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
+// For now, ingredients live in memory and reset when the app reloads.
+// Later this list comes from SQLite (src/db/).
+type Ingredient = {
+  name: string;
+  useCount: number; // how often it's been used; drives the order
+};
+
+const STARTER_INGREDIENTS: Ingredient[] = [
+  { name: "Eggs", useCount: 1 },
+  { name: "Onion", useCount: 4 },
+  { name: "Garlic", useCount: 4 },
+  { name: "Rice", useCount: 3 },
+  { name: "Pasta", useCount: 3 },
+  { name: "Tinned tomatoes", useCount: 2 },
+  { name: "Cheddar", useCount: 2 },
+  { name: "Spinach", useCount: 1 },
+  { name: "Feta", useCount: 0 },
+];
+
+export default function PantryScreen() {
+  const [ingredients, setIngredients] = useState<Ingredient[]>(STARTER_INGREDIENTS);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [newItem, setNewItem] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [reply, setReply] = useState<string | null>(null); // null = no recipe showing
+
+  // Most-used first; ties sorted alphabetically.
+  const sorted = [...ingredients].sort(
+    (a, b) => b.useCount - a.useCount || a.name.localeCompare(b.name)
+  );
+
+  function toggle(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
   }
-  if (Device.isDevice) {
+
+  function addIngredient() {
+    const name = newItem.trim();
+    if (!name) return;
+
+    // Reuse the existing item if it's already there (case-insensitive).
+    const existing = ingredients.find(
+      (i) => i.name.toLowerCase() === name.toLowerCase()
+    );
+    const finalName = existing ? existing.name : name;
+
+    if (!existing) {
+      setIngredients((prev) => [...prev, { name: finalName, useCount: 0 }]);
+    }
+    setSelected((prev) => new Set(prev).add(finalName));
+    setNewItem("");
+  }
+
+  async function suggestRecipe() {
+    if (selected.size === 0) {
+      Alert.alert("Pick some ingredients first");
+      return;
+    }
+
+    const chosen = [...selected];
+    // Bump the use count of everything selected, so it moves up the list.
+    setIngredients((prev) =>
+      prev.map((i) =>
+        selected.has(i.name) ? { ...i, useCount: i.useCount + 1 } : i
+      )
+    );
+    setSelected(new Set());
+
+    setLoading(true);
+
+    try {
+      const text = await askForRecipe(chosen);
+      setReply(text);
+    } catch (err) {
+      Alert.alert("Couldn't get a recipe", String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+  
+  if (reply !== null) {
     return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        <Text style={styles.title}>Suggestion</Text>
+        <ScrollView contentContainerStyle={styles.replyBox}>
+          <Text style={styles.replyText}>{reply}</Text>
+        </ScrollView>
+        <View style={styles.footer}>
+          <Pressable style={styles.suggestButton} onPress={() => setReply(null)}>
+            <Text style={styles.suggestText}>Back to pantry</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
     );
   }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <Text style={styles.title}>My Pantry</Text>
+      <Text style={styles.subtitle}>Tap what you have</Text>
+
+      <ScrollView
+        contentContainerStyle={styles.grid}
+        keyboardShouldPersistTaps="handled"
+      >
+        {sorted.map((item) => {
+          const isSelected = selected.has(item.name);
+          return (
+            <Pressable
+              key={item.name}
+              onPress={() => toggle(item.name)}
+              style={[styles.chip, isSelected && styles.chipSelected]}
+            >
+              <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                {item.name}
+                {item.useCount > 0 && ` (${item.useCount})`}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <View style={styles.addRow}>
+        <TextInput
+          style={styles.input}
+          placeholder="Add an ingredient"
+          placeholderTextColor="#8a8a8a"
+          value={newItem}
+          onChangeText={setNewItem}
+          onSubmitEditing={addIngredient}
+          returnKeyType="done"
+        />
+        <Pressable style={styles.addButton} onPress={addIngredient}>
+          <Text style={styles.addButtonText}>Add</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.footer}>
+        {selected.size > 0 && (
+          <Pressable onPress={() => setSelected(new Set())}>
+            <Text style={styles.clearText}>Clear</Text>
+          </Pressable>
+        )}
+        <Pressable
+          style={[styles.suggestButton, (selected.size === 0 || loading) && styles.suggestDisabled]}
+          onPress={suggestRecipe}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.suggestText}>
+              Suggest a recipe{selected.size > 0 ? ` (${selected.size})` : ""}
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </SafeAreaView>
   );
 }
 
-
-export default function HomeScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
-  );
-}
+const GREEN = "#2f7d4f";
 
 const styles = StyleSheet.create({
-  container: {
+  screen: { flex: 1, backgroundColor: "#ffffff", paddingHorizontal: 16 },
+  title: { fontSize: 28, fontWeight: "700", color: "#1a1a1a", marginTop: 8 },
+  subtitle: { fontSize: 15, color: "#666666", marginBottom: 16 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingBottom: 16 },
+  chip: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#d0d0d0",
+    backgroundColor: "#f7f7f7",
+  },
+  chipSelected: { backgroundColor: GREEN, borderColor: GREEN },
+  chipText: { fontSize: 15, color: "#1a1a1a" },
+  chipTextSelected: { color: "#ffffff", fontWeight: "600" },
+  addRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  input: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: "#d0d0d0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#1a1a1a",
   },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+  addButton: {
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: "#1a1a1a",
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+  addButtonText: { color: "#ffffff", fontWeight: "600" },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 16,
+    paddingBottom: 24,
   },
-  title: {
-    textAlign: 'center',
+  clearText: { color: "#666666", fontSize: 15 },
+  suggestButton: {
+    backgroundColor: GREEN,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
   },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  suggestDisabled: { opacity: 0.4 },
+  suggestText: { color: "#ffffff", fontSize: 16, fontWeight: "600" },
+  replyBox: { paddingVertical: 16 },
+  replyText: { fontSize: 16, lineHeight: 24, color: "#1a1a1a" },
 });
+
