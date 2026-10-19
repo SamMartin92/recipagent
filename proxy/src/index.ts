@@ -11,46 +11,146 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 const MODEL = "claude-haiku-4-5";
+const DEFAULT_BASICS = ["oil", "salt", "pepper"];
 
-type ChatRequest = { message: string };
+type MessageRequest = { message: string };
+
+type SuggestRequest = {
+  ingredients: string[];
+  basics?: string[]; // optional; defaults to oil, salt, pepper
+};
+
+type Suggestion = {
+  title: string;
+  description: string;
+  minutes: number;
+};
+
+// ---------- Prompts ----------
+
+const SUGGEST_PROMPT = `You suggest home-cooked meals from the ingredients someone has.
+Always give exactly 3 suggestions, in this order:
+1. The best fit for these ingredients.
+2. A good alternative, slightly less obvious.
+3. A wildcard: something more adventurous or from a different cuisine.
+Do not label or explain the order.
+Recipes may use the listed ingredients plus the basics. They don't need to use every ingredient.
+Each description is one short sentence. "minutes" is the total time to make it.`;
+
+// A "tool" with a strict schema. We force Claude to call it, so its answer
+// always arrives as JSON in exactly this shape, never as free text.
+const SUGGEST_TOOL = {
+  name: "give_suggestions",
+  description: "Return exactly 3 meal suggestions.",
+  input_schema: {
+    type: "object",
+    properties: {
+      suggestions: {
+        type: "array",
+        minItems: 3,
+        maxItems: 3,
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string", description: "One short sentence." },
+            minutes: { type: "integer", description: "Total time in minutes." },
+          },
+          required: ["title", "description", "minutes"],
+        },
+      },
+    },
+    required: ["suggestions"],
+  },
+};
 
 export default {
-	async fetch(request, env, ctx): Promise<Response> {
-		if (request.method !== "POST") {
-      		return new Response("Send a POST request", { status: 405 });
-    }	
-	const { message } = await request.json<ChatRequest>();
-
-    if (typeof message !== "string") {
-      return new Response('Body must be { "message": "..." }', { status: 400 });
+  async fetch(request, env, ctx): Promise<Response> {
+    if (request.method !== "POST") {
+      return new Response("Send a POST request", { status: 405 });
     }
-
-	const llmResponse = await fetch(
-      "https://api.anthropic.com/v1/messages",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": env.ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-workspace-id": env.ANTHROPIC_WORKSPACE_ID,
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          max_tokens: 1024,
-          system: "You are a helpful home-cooking assistant. Suggest recipes using the ingredients the user has.",
-          messages: [{ role: "user", content: message }],
-      })
-    });
-    
-
-	if (!llmResponse.ok) {
-      return new Response(await llmResponse.text(), { status: llmResponse.status });
+    try {
+      const path = new URL(request.url).pathname;
+      if (path === "/suggest") return await handleSuggest(request, env);
+      return await handleMessage(request, env);
+    } catch (err) {
+      return new Response(String(err), { status: 500 });
     }
-	const data = await llmResponse.json<any>();
-
-  const reply = data.content?.[0].text ?? "Empty response";
-
-    return Response.json({ reply });
-	},
+  },
 } satisfies ExportedHandler<Env>;
+
+// ---------- Routes ----------
+
+// POST /suggest  { ingredients: [...] }  ->  { suggestions: [3 x Suggestion] }
+async function handleSuggest(request: Request, env: Env): Promise<Response> {
+  const body = await request.json<SuggestRequest>();
+
+  const ok =
+    Array.isArray(body.ingredients) &&
+    body.ingredients.length > 0 &&
+    body.ingredients.every((i) => typeof i === "string");
+  if (!ok) {
+    return new Response("Request body must be { ingredients: string[] }", {
+      status: 400,
+    });
+  }
+
+  const basics = body.basics ?? DEFAULT_BASICS;
+
+  const data = await callLLM(env, {
+    model: MODEL,
+    max_tokens: 1024,
+    system: SUGGEST_PROMPT,
+    tools: [SUGGEST_TOOL],
+    tool_choice: { type: "tool", name: "give_suggestions" }, // must use the tool
+    messages: [
+      {
+        role: "user",
+        content: `Ingredients I have: ${body.ingredients.join(", ")}.\nBasics I always have: ${basics.join(", ")}.`,
+      },
+    ],
+  });
+  console.log(JSON.stringify(data, null, 2));
+  // The answer is in the tool_use block's "input", already parsed as JSON.
+  const toolUse = data.content?.find((block: any) => block.type === "tool_use");
+  const suggestions: Suggestion[] | undefined = toolUse?.input?.suggestions;
+  if (!Array.isArray(suggestions)) {
+    return new Response("Model returned no suggestions", { status: 502 });
+  }
+  return Response.json({ suggestions });
+}
+
+// POST /  { message: "..." }  ->  { reply: "..." }   (the original route)
+async function handleMessage(request: Request, env: Env): Promise<Response> {
+  const { message } = await request.json<MessageRequest>();
+  if (typeof message !== "string") {
+    return new Response('Body must be { "message": "..." }', { status: 400 });
+  }
+ 
+  const data = await callLLM(env, {
+    model: MODEL,
+    max_tokens: 1024,
+    system: "You are a helpful home-cooking assistant. Suggest recipes using the ingredients the user has.",
+    messages: [{ role: "user", content: message }],
+  });
+ 
+  const reply = data.content?.[0]?.text ?? "";
+  return Response.json({ reply });
+}
+
+async function callLLM(env: Env, body: object): Promise<any> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify(body),
+  });
+ 
+  if (!response.ok) {
+    throw new Error(`Anthropic ${response.status}: ${await response.text()}`);
+  }
+  return response.json();
+}
