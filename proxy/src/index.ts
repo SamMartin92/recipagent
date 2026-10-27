@@ -26,6 +26,21 @@ type Suggestion = {
   minutes: number;
 };
 
+type RecipeRequest = {
+  suggestion: Suggestion;   
+  ingredients: string[];
+  basics?: string[];
+};
+
+type Recipe = {
+  title: string;
+  minutes: number;
+  servings: number;
+  ingredients: string[];    
+  steps: string[];
+};
+
+
 // ---------- Prompts ----------
 
 const SUGGEST_PROMPT = `You suggest home-cooked meals from the ingredients someone has.
@@ -37,6 +52,14 @@ Do not label or explain the order.
 Recipes may use the listed ingredients plus the basics. They don't need to use every ingredient.
 Each description is one short sentence. "minutes" is the total time to make it.`;
 
+const RECIPE_PROMPT = `You write clear home-cooking recipes.
+Write the full recipe for exactly the dish described, matching its title and description.
+Use the listed ingredients plus the basics; it doesn't need to use every ingredient.
+Give each ingredient with an amount. Keep steps short, one action each, in order.`;
+
+
+
+// ---------- tools ----------
 // A "tool" with a strict schema. We force Claude to call it, so its answer
 // always arrives as JSON in exactly this shape, never as free text.
 const SUGGEST_TOOL = {
@@ -64,6 +87,28 @@ const SUGGEST_TOOL = {
   },
 };
 
+const RECIPE_TOOL = {
+  name: "give_recipe",
+  description: "Return the full recipe.",
+  input_schema: {
+    type: "object",
+    properties: {
+      title: { type: "string" },
+      minutes: { type: "integer", description: "Total time in minutes." },
+      servings: { type: "integer" },
+      ingredients: {
+        type: "array",
+        items: { type: "string", description: "Ingredient with amount, e.g. '3 eggs'." },
+      },
+      steps: {
+        type: "array",
+        items: { type: "string", description: "One short instruction." },
+      },
+    },
+    required: ["title", "minutes", "servings", "ingredients", "steps"],
+  },
+};
+
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     if (request.method !== "POST") {
@@ -72,6 +117,7 @@ export default {
     try {
       const path = new URL(request.url).pathname;
       if (path === "/suggest") return await handleSuggest(request, env);
+      if (path === "/recipe") return await handleRecipe(request, env); 
       return await handleMessage(request, env);
     } catch (err) {
       return new Response(String(err), { status: 500 });
@@ -118,6 +164,46 @@ async function handleSuggest(request: Request, env: Env): Promise<Response> {
     return new Response("Model returned no suggestions", { status: 502 });
   }
   return Response.json({ suggestions });
+}
+
+async function handleRecipe(request: Request, env: Env): Promise<Response> {
+  const body = await request.json<RecipeRequest>();
+
+  const ok =
+    typeof body.suggestion?.title === "string" &&
+    Array.isArray(body.ingredients) &&
+    body.ingredients.every((i) => typeof i === "string");
+  if (!ok) {
+    return new Response('Body must be { "suggestion": {...}, "ingredients": ["..."] }', { status: 400 });
+  }
+
+  const basics = body.basics ?? DEFAULT_BASICS;
+  const { title, description } = body.suggestion;
+
+  const data = await callLLM(env, {
+    model: MODEL,
+    max_tokens: 2048,
+    system: RECIPE_PROMPT,
+    tools: [RECIPE_TOOL],
+    tool_choice: { type: "tool", name: "give_recipe" },
+    messages: [
+      {
+        role: "user",
+        content:
+          `Dish: ${title}. ${description}\n` +
+          `Ingredients I have: ${body.ingredients.join(", ")}.\n` +
+          `Basics I always have: ${basics.join(", ")}.`,
+      },
+    ],
+  });
+
+  const toolUse = data.content?.find((block: any) => block.type === "tool_use");
+  const recipe: Recipe | undefined = toolUse?.input;
+
+  if (!recipe || !Array.isArray(recipe.steps)) {
+    return new Response("Model returned no recipe", { status: 502 });
+  }
+  return Response.json({ recipe });
 }
 
 // POST /  { message: "..." }  ->  { reply: "..." }   (the original route)
