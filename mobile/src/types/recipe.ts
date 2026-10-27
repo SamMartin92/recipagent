@@ -4,3 +4,11 @@ export type Suggestion = {
   description: string;
   minutes: number;
 };
+
+export type Recipe = {
+  title: string;
+  minutes: number;
+  servings: number;
+  ingredients: string[];
+  steps: string[];
+};
