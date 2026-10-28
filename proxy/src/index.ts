@@ -13,8 +13,6 @@
 const MODEL = "claude-haiku-4-5";
 const DEFAULT_BASICS = ["oil", "salt", "pepper"];
 
-type MessageRequest = { message: string };
-
 type SuggestRequest = {
   ingredients: string[];
   basics?: string[]; // optional; defaults to oil, salt, pepper
@@ -40,6 +38,15 @@ type Recipe = {
   steps: string[];
 };
 
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
+type ChatRequest = {
+  recipe: Recipe;           // the recipe currently on screen
+  ingredients: string[];
+  basics?: string[];
+  messages: ChatMessage[];  // the whole chat so far, ending with the user's new message
+};
+
 
 // ---------- Prompts ----------
 
@@ -62,7 +69,10 @@ Write the full recipe for exactly the dish described, matching its title and des
 Use the listed ingredients plus the basics; it doesn't need to use every ingredient.
 Give each ingredient with an amount. Keep steps short, one action each, in order.`;
 
-
+const CHAT_PROMPT = `You help someone cook the recipe below. Answer briefly and practically, no preamble.
+If they ask to change the recipe, return the complete updated recipe in "recipe" and say what changed in "message".
+If they only ask a question, answer in "message" and leave "recipe" out.
+Strict rule: only use the listed ingredients and basics, unless they tell you they have something else.`;
 
 // ---------- tools ----------
 // A "tool" with a strict schema. We force Claude to call it, so its answer
@@ -127,7 +137,8 @@ export default {
       const path = new URL(request.url).pathname;
       if (path === "/suggest") return await handleSuggest(request, env);
       if (path === "/recipe") return await handleRecipe(request, env);
-      return await handleMessage(request, env);
+      if (path === "/chat") return await handleChat(request, env);
+      return new Response("Not found", { status: 404 });
     } catch (err) {
       return new Response(String(err), { status: 500 });
     }
@@ -215,22 +226,37 @@ async function handleRecipe(request: Request, env: Env): Promise<Response> {
   return Response.json({ recipe });
 }
 
-// POST /  { message: "..." }  ->  { reply: "..." }   (the original route)
-async function handleMessage(request: Request, env: Env): Promise<Response> {
-  const { message } = await request.json<MessageRequest>();
-  if (typeof message !== "string") {
-    return new Response('Body must be { "message": "..." }', { status: 400 });
+async function handleChat(request: Request, env: Env): Promise<Response> {
+  const body = await request.json<ChatRequest>();
+
+  const ok =
+    Array.isArray(body.recipe?.steps) &&
+    Array.isArray(body.ingredients) &&
+    Array.isArray(body.messages) &&
+    body.messages.length > 0 &&
+    body.messages.at(-1)?.role === "user";
+  if (!ok) {
+    return new Response('Body must be { "recipe", "ingredients", "messages" } ending with a user message', { status: 400 });
   }
+
+  const basics = body.basics ?? DEFAULT_BASICS;
 
   const data = await callLLM(env, {
     model: MODEL,
-    max_tokens: 1024,
-    system: "You are a helpful home-cooking assistant. Suggest recipes using the ingredients the user has.",
-    messages: [{ role: "user", content: message }],
+    max_tokens: 2048,
+    system:
+      `${CHAT_PROMPT}\n\n` +
+      `Ingredients I have: ${body.ingredients.join(", ")}.\n` +
+      `Basics I always have: ${basics.join(", ")}.\n\n` +
+      `Recipe:\n${JSON.stringify(body.recipe)}`,
+    messages: body.messages,
   });
 
-  const reply = data.content?.[0]?.text ?? "";
-  return Response.json({ reply });
+  const message = data.content?.find((block: any) => block.type === "text")?.text;
+  if (typeof message !== "string") {
+    return new Response("Model returned no reply", { status: 502 });
+  }
+  return Response.json({ message });
 }
 
 async function callLLM(env: Env, body: object): Promise<any> {
