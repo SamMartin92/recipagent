@@ -11,8 +11,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getSuggestions } from "../api/recipes";
-import { Suggestion } from "../types/recipe";
+import { getSuggestions } from "../../api/recipes";
+import { Suggestion } from "../../types/recipe";
 
 // For now, ingredients live in memory and reset when the app reloads.
 // Later this list comes from SQLite (src/db/).
