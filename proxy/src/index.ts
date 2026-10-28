@@ -27,7 +27,7 @@ type Suggestion = {
 };
 
 type RecipeRequest = {
-  suggestion: Suggestion;   
+  suggestion: Suggestion;
   ingredients: string[];
   basics?: string[];
 };
@@ -36,23 +36,28 @@ type Recipe = {
   title: string;
   minutes: number;
   servings: number;
-  ingredients: string[];    
+  ingredients: string[];
   steps: string[];
 };
 
 
 // ---------- Prompts ----------
 
-const SUGGEST_PROMPT = `You suggest home-cooked meals from the ingredients someone has.
-Always give exactly 3 suggestions, in this order:
-1. The best fit for these ingredients.
+const SUGGEST_PROMPT = `Someone tells you exactly what food they have. Suggest meals they can make right now.
+Strict rule: each meal may ONLY use the listed ingredients and the basics. Nothing else.
+Do not add or assume any other ingredient, even common ones like onion, garlic, rice, butter or herbs.
+A meal doesn't need to use every listed ingredient.
+Give exactly 3 suggestions, in this order:
+1. The best fit.
 2. A good alternative, slightly less obvious.
-3. A wildcard: something more adventurous or from a different cuisine.
+3. A wildcard: a more unusual dish, still using only what's available.
 Do not label or explain the order.
-Recipes may use the listed ingredients plus the basics. They don't need to use every ingredient.
 Each description is one short sentence. "minutes" is the total time to make it.`;
 
 const RECIPE_PROMPT = `You write clear home-cooking recipes.
+Strict rule: each meal may ONLY use ingredients from the two lists given (ingredients I have, and basics).
+Never assume any ingredient that isn't in those lists, even common ones like onion, garlic, rice, butter or herbs.
+If one of those IS in either list, it's fine to use.
 Write the full recipe for exactly the dish described, matching its title and description.
 Use the listed ingredients plus the basics; it doesn't need to use every ingredient.
 Give each ingredient with an amount. Keep steps short, one action each, in order.`;
@@ -66,6 +71,10 @@ const SUGGEST_TOOL = {
   name: "give_suggestions",
   description: "Return exactly 3 meal suggestions.",
   input_schema: {
+    uses: {
+      type: "array", items: { type: "string" },
+      description: "Every ingredient this meal needs, each one from the list or the basics."
+    },
     type: "object",
     properties: {
       suggestions: {
@@ -117,7 +126,7 @@ export default {
     try {
       const path = new URL(request.url).pathname;
       if (path === "/suggest") return await handleSuggest(request, env);
-      if (path === "/recipe") return await handleRecipe(request, env); 
+      if (path === "/recipe") return await handleRecipe(request, env);
       return await handleMessage(request, env);
     } catch (err) {
       return new Response(String(err), { status: 500 });
@@ -212,14 +221,14 @@ async function handleMessage(request: Request, env: Env): Promise<Response> {
   if (typeof message !== "string") {
     return new Response('Body must be { "message": "..." }', { status: 400 });
   }
- 
+
   const data = await callLLM(env, {
     model: MODEL,
     max_tokens: 1024,
     system: "You are a helpful home-cooking assistant. Suggest recipes using the ingredients the user has.",
     messages: [{ role: "user", content: message }],
   });
- 
+
   const reply = data.content?.[0]?.text ?? "";
   return Response.json({ reply });
 }
@@ -234,7 +243,7 @@ async function callLLM(env: Env, body: object): Promise<any> {
     },
     body: JSON.stringify(body),
   });
- 
+
   if (!response.ok) {
     throw new Error(`Anthropic ${response.status}: ${await response.text()}`);
   }
