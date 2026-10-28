@@ -69,9 +69,10 @@ Write the full recipe for exactly the dish described, matching its title and des
 Use the listed ingredients plus the basics; it doesn't need to use every ingredient.
 Give each ingredient with an amount. Keep steps short, one action each, in order.`;
 
-const CHAT_PROMPT = `You help someone cook the recipe below. Answer briefly and practically, no preamble.
-If they ask to change the recipe, return the complete updated recipe in "recipe" and say what changed in "message".
-If they only ask a question, answer in "message" and leave "recipe" out.
+const CHAT_PROMPT = `You help someone cook the recipe below. Chat naturally and briefly, no preamble.
+If they ask for a change, write out the revised recipe (or just the changed parts if it's small).
+Always reply in plain conversational sentences, never JSON.
+Write plain text only, no markdown symbols like ** or #. Use simple numbered lines for steps.
 Strict rule: only use the listed ingredients and basics, unless they tell you they have something else.`;
 
 // ---------- tools ----------
@@ -248,7 +249,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       `${CHAT_PROMPT}\n\n` +
       `Ingredients I have: ${body.ingredients.join(", ")}.\n` +
       `Basics I always have: ${basics.join(", ")}.\n\n` +
-      `Recipe:\n${JSON.stringify(body.recipe)}`,
+      `Recipe (for reference only; never reply in JSON):\n${JSON.stringify(body.recipe)}`,
     messages: body.messages,
   });
 

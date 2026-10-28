@@ -12,3 +12,5 @@ export type Recipe = {
   ingredients: string[];
   steps: string[];
 };
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };

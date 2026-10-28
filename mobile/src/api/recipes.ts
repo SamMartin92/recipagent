@@ -1,4 +1,4 @@
-import { Recipe, Suggestion } from "../types/recipe";
+import { Recipe, Suggestion, ChatMessage } from "../types/recipe";
 
 // App talk to Cloudfare worker here. Cloudfare calls Anthropic API to get recipes.
 const PROXY_URL = process.env.EXPO_PUBLIC_PROXY_URL!;
@@ -35,4 +35,21 @@ export async function getRecipe(suggestion: Suggestion, ingredients: string[]): 
 
   const data = (await response.json()) as { recipe: Recipe };
   return data.recipe;
+}
+
+export async function sendChat(
+  recipe: Recipe,
+  ingredients: string[],
+  messages: ChatMessage[]
+): Promise<string> {
+  const response = await fetch(`${PROXY_URL}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ recipe, ingredients, messages }),
+  });
+  if (!response.ok) {
+    throw new Error(`Proxy error ${response.status}: ${await response.text()}`);
+  }
+  const data = (await response.json()) as { message: string };
+  return data.message;
 }
