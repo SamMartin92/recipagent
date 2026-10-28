@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -34,7 +35,9 @@ const STARTER_INGREDIENTS: Ingredient[] = [
 ];
 
 export default function IngredientsScreen() {
+  const router = useRouter();
   const [ingredients, setIngredients] = useState<Ingredient[]>(STARTER_INGREDIENTS);
+  const [lastIngredients, setLastIngredients] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newItem, setNewItem] = useState("");
   const [loading, setLoading] = useState(false);
@@ -93,6 +96,7 @@ export default function IngredientsScreen() {
 
     try {
       const list = await getSuggestions(chosen);
+      setLastIngredients(chosen);
       setSuggestions(list);
     } catch (err) {
       Alert.alert("Couldn't get suggestions", String(err));
@@ -110,7 +114,15 @@ export default function IngredientsScreen() {
           <Pressable
             key={index}
             style={styles.card}
-            onPress={() => Alert.alert(s.title, "Full recipe coming next")}
+            onPress={() =>
+              router.push({
+                pathname: "/recipe",
+                params: {
+                  suggestion: JSON.stringify(s),
+                  ingredients: JSON.stringify(lastIngredients),
+                },
+              })
+            }
           >
             <Text style={styles.cardTitle}>{s.title}</Text>
             <Text style={styles.cardDescription}>{s.description}</Text>
@@ -123,7 +135,7 @@ export default function IngredientsScreen() {
           <Text style={styles.suggestText}>Back to ingredients</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </SafeAreaView >
     );
   }
 
