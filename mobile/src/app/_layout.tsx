@@ -15,7 +15,7 @@ export default function RootLayout() {
       <AnimatedSplashOverlay />
        <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="recipe" options={{ title: 'Recipe' }} />
+        <Stack.Screen name="recipe" options={{ title: 'Recipe', headerBackButtonDisplayMode: 'minimal' }} />
        </Stack>
     </ThemeProvider>
   );
