@@ -9,39 +9,39 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Profile tab. For now everything lives in local state and resets on reload.
-// Later this loads from and saves to the home PC server.
+import { useProfile } from "@/context/profile";
 
 const DIETS = ["Vegetarian", "Vegan", "Pescatarian", "Gluten-free"];
 
 export default function ProfileScreen() {
-  const [basics, setBasics] = useState<string[]>(["Oil", "Salt", "Pepper"]);
+  const { profile, setProfile } = useProfile();
   const [newBasic, setNewBasic] = useState("");
-  const [diet, setDiet] = useState<Set<string>>(new Set());
-  const [notes, setNotes] = useState("");
 
   function addBasic() {
     const name = newBasic.trim();
     if (!name) return;
-    const exists = basics.some((b) => b.toLowerCase() === name.toLowerCase());
-    if (!exists) setBasics((prev) => [...prev, name]);
+    setProfile((prev) => {
+      const exists = prev.basics.some((b) => b.toLowerCase() === name.toLowerCase());
+      return exists ? prev : { ...prev, basics: [...prev.basics, name] };
+    });
     setNewBasic("");
   }
 
   function removeBasic(name: string) {
-    setBasics((prev) => prev.filter((b) => b !== name));
+    setProfile((prev) => ({ ...prev, basics: prev.basics.filter((b) => b !== name) }));
   }
 
   function toggleDiet(name: string) {
-  setDiet((prev) => {
-    const next = new Set(prev);
-    if (next.has(name)) {
-      next.delete(name);
-    } else {
-      next.add(name);
-    }
-    return next;
-  });
+    setProfile((prev) => ({
+      ...prev,
+      diets: prev.diets.includes(name)
+        ? prev.diets.filter((d) => d !== name)
+        : [...prev.diets, name],
+    }));
+  }
+
+  function setNotes(notes: string) {
+  setProfile((prev) => ({ ...prev, notes }));
 }
 
   return (
@@ -53,7 +53,7 @@ export default function ProfileScreen() {
         <Text style={styles.heading}>Basic ingredients</Text>
         <Text style={styles.hint}>Things you always have. Recipes can use these. Tap one to remove it.</Text>
         <View style={styles.chips}>
-          {basics.map((b) => (
+          {profile.basics.map((b) => (
             <Pressable key={b} style={styles.chip} onPress={() => removeBasic(b)}>
               <Text style={styles.chipText}>{b} ✕</Text>
             </Pressable>
@@ -74,11 +74,11 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        {/* Diet */}
+        {/* Diet: pick any number; none selected = no restrictions */}
         <Text style={styles.heading}>Diet</Text>
         <View style={styles.chips}>
           {DIETS.map((d) => {
-            const isSelected = diet.has(d);
+            const isSelected = profile.diets.includes(d);
             return (
               <Pressable
                 key={d}
@@ -97,9 +97,10 @@ export default function ProfileScreen() {
           style={[styles.input, styles.notes]}
           placeholder="e.g. Don't like spicy food. Avoid processed ingredients."
           placeholderTextColor="#8a8a8a"
-          value={notes}
+          value={profile.notes}
           onChangeText={setNotes}
           multiline
+          maxLength={500}
           textAlignVertical="top"
         />
       </ScrollView>
