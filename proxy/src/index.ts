@@ -16,6 +16,8 @@ const DEFAULT_BASICS = ["oil", "salt", "pepper"];
 type SuggestRequest = {
   ingredients: string[];
   basics?: string[]; // optional; defaults to oil, salt, pepper
+  diets?: string[];
+  notes?: string;
 };
 
 type Suggestion = {
@@ -28,6 +30,8 @@ type RecipeRequest = {
   suggestion: Suggestion;
   ingredients: string[];
   basics?: string[];
+  diets?: string[];
+  notes?: string;
 };
 
 type Recipe = {
@@ -45,6 +49,8 @@ type ChatRequest = {
   ingredients: string[];
   basics?: string[];
   messages: ChatMessage[];  // the whole chat so far, ending with the user's new message
+  diets?: string[];
+  notes?: string;
 };
 
 
@@ -59,7 +65,8 @@ Give exactly 3 suggestions, in this order:
 2. A good alternative, slightly less obvious.
 3. A wildcard: a more unusual dish, still using only what's available.
 Do not label or explain the order.
-Each description is one short sentence. "minutes" is the total time to make it.`;
+Each description is one short sentence. "minutes" is the total time to make it.
+Strictly respect user's dietary restrictions and consider their likes and dislikes. Never suggest a meal that violates those.`;
 
 const RECIPE_PROMPT = `You write clear home-cooking recipes.
 Strict rule: each meal may ONLY use ingredients from the two lists given (ingredients I have, and basics).
@@ -67,7 +74,8 @@ Never assume any ingredient that isn't in those lists, even common ones like oni
 If one of those IS in either list, it's fine to use.
 Write the full recipe for exactly the dish described, matching its title and description.
 Use the listed ingredients plus the basics; it doesn't need to use every ingredient.
-Give each ingredient with an amount. Keep steps short, one action each, in order.`;
+Give each ingredient with an amount. Keep steps short, one action each, in order.
+Strictly respect user's dietary restrictions and consider their likes and dislikes. Never suggest a meal that violates those`;
 
 const CHAT_PROMPT = `You are a cooking assistant chatting with a home cook about the recipe below.
 Chat naturally and briefly, no preamble. Always reply in plain conversational sentences, never JSON.
@@ -75,7 +83,8 @@ Write plain text only, no markdown symbols like ** or #. Use simple numbered lin
 Prefer what the cook has (their ingredients and basics).
 If what they ask needs something extra, don't refuse or ask whether they have it: answer directly,
 naming the extra ingredient, e.g. "If you have chilli flakes, add a pinch to the eggs in step 2."
-If they ask for a change, write out the revised steps.`;
+If they ask for a change, write out the revised steps.
+Strictly respect user's dietary restrictions and consider their likes and dislikes. Never suggest a meal that violates those`;
 
 // ---------- tools ----------
 // A "tool" with a strict schema. We force Claude to call it, so its answer
@@ -148,6 +157,13 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+function profileLines(basics: string[], diets?: string[], notes?: string): string {
+  const lines = [`Basics always available: ${basics.join(", ")}.`];
+  if (diets?.length) lines.push(`Diet, must be followed strictly: ${diets.join(", ")}.`);
+  if (notes?.trim()) lines.push(`Likes and dislikes: ${notes.trim().slice(0, 500)}`);
+  return lines.join("\n");
+}
+
 // ---------- Routes ----------
 
 // POST /suggest  { ingredients: [...] }  ->  { suggestions: [3 x Suggestion] }
@@ -175,7 +191,7 @@ async function handleSuggest(request: Request, env: Env): Promise<Response> {
     messages: [
       {
         role: "user",
-        content: `Ingredients I have: ${body.ingredients.join(", ")}.\nBasics I always have: ${basics.join(", ")}.`,
+        content: `Ingredients I have: ${body.ingredients.join(", ")}.\n${profileLines(basics, body.diets, body.notes)}`,
       },
     ],
   });
@@ -215,7 +231,7 @@ async function handleRecipe(request: Request, env: Env): Promise<Response> {
         content:
           `Dish: ${title}. ${description}\n` +
           `Ingredients I have: ${body.ingredients.join(", ")}.\n` +
-          `Basics I always have: ${basics.join(", ")}.`,
+          `${profileLines(basics, body.diets, body.notes)}`,
       },
     ],
   });
@@ -250,7 +266,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     system:
       `${CHAT_PROMPT}\n\n` +
       `The user's ingredients: ${body.ingredients.join(", ")}.\n` +
-      `The user's basics: ${basics.join(", ")}.\n\n` +
+      `${profileLines(basics, body.diets, body.notes)}\n\n` +
       `Recipe (for reference only; never reply in JSON):\n${JSON.stringify(body.recipe)}`,
     messages: body.messages,
   });
