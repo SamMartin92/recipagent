@@ -12,12 +12,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 // Profile tab. For now everything lives in local state and resets on reload.
 // Later this loads from and saves to the home PC server.
 
-const DIETS = ["None", "Vegetarian", "Vegan", "Pescatarian"];
+const DIETS = ["Vegetarian", "Vegan", "Pescatarian", "Gluten-free"];
 
 export default function ProfileScreen() {
   const [basics, setBasics] = useState<string[]>(["Oil", "Salt", "Pepper"]);
   const [newBasic, setNewBasic] = useState("");
-  const [diet, setDiet] = useState("None");
+  const [diet, setDiet] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
 
   function addBasic() {
@@ -31,6 +31,18 @@ export default function ProfileScreen() {
   function removeBasic(name: string) {
     setBasics((prev) => prev.filter((b) => b !== name));
   }
+
+  function toggleDiet(name: string) {
+  setDiet((prev) => {
+    const next = new Set(prev);
+    if (next.has(name)) {
+      next.delete(name);
+    } else {
+      next.add(name);
+    }
+    return next;
+  });
+}
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -66,12 +78,12 @@ export default function ProfileScreen() {
         <Text style={styles.heading}>Diet</Text>
         <View style={styles.chips}>
           {DIETS.map((d) => {
-            const isSelected = diet === d;
+            const isSelected = diet.has(d);
             return (
               <Pressable
                 key={d}
                 style={[styles.chip, isSelected && styles.chipSelected]}
-                onPress={() => setDiet(d)}
+                onPress={() => toggleDiet(d)}
               >
                 <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>{d}</Text>
               </Pressable>
