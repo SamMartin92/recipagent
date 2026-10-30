@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getSuggestions } from "../../api/recipes";
 import { Suggestion } from "../../types/recipe";
+import { useProfile } from "@/context/profile";
 
 // For now, ingredients live in memory and reset when the app reloads.
 // Later this list comes from SQLite (src/db/).
@@ -36,6 +37,7 @@ const STARTER_INGREDIENTS: Ingredient[] = [
 
 export default function IngredientsScreen() {
   const router = useRouter();
+  const { profile } = useProfile();
   const [ingredients, setIngredients] = useState<Ingredient[]>(STARTER_INGREDIENTS);
   const [lastIngredients, setLastIngredients] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -95,7 +97,7 @@ export default function IngredientsScreen() {
     setLoading(true);
 
     try {
-      const list = await getSuggestions(chosen);
+      const list = await getSuggestions(chosen, profile);
       setLastIngredients(chosen);
       setSuggestions(list);
     } catch (err) {

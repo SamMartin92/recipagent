@@ -15,18 +15,20 @@ import {
 
 import { getRecipe, sendChat } from "@/api/recipes";
 import type { ChatMessage, Recipe, Suggestion } from "@/types/recipe";
+import { useProfile } from "@/context/profile";
 
 // Opened from a suggestion card. Params arrive as strings, so the card and
 // ingredients are passed as JSON and parsed back here.
 export default function RecipeScreen() {
   const params = useLocalSearchParams<{ suggestion: string; ingredients: string }>();
+  const { profile } = useProfile();
   const ingredients = JSON.parse(params.ingredients) as string[];
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [error, setError] = useState<string | null>(null);
 
 
   // Chat state
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);§
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
@@ -35,7 +37,7 @@ export default function RecipeScreen() {
   useEffect(() => {
     const suggestion = JSON.parse(params.suggestion) as Suggestion;
 
-    getRecipe(suggestion, ingredients)
+    getRecipe(suggestion, ingredients, profile)
       .then(setRecipe)
       .catch((err) => setError(String(err)));
   }, [params.suggestion, params.ingredients]);
@@ -51,7 +53,7 @@ export default function RecipeScreen() {
     setSending(true);
  
     try {
-      const reply = await sendChat(recipe, ingredients, history);
+      const reply = await sendChat(recipe, ingredients, profile, history);
       setMessages([...history, { role: "assistant", content: reply }]);
     } catch (err) {
       setMessages([...history, { role: "assistant", content: `Sorry, something went wrong: ${err}` }]);
