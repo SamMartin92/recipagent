@@ -69,11 +69,13 @@ Write the full recipe for exactly the dish described, matching its title and des
 Use the listed ingredients plus the basics; it doesn't need to use every ingredient.
 Give each ingredient with an amount. Keep steps short, one action each, in order.`;
 
-const CHAT_PROMPT = `You help someone cook the recipe below. Chat naturally and briefly, no preamble.
-If they ask for a change, write out the revised recipe (or just the changed parts if it's small).
-Always reply in plain conversational sentences, never JSON.
+const CHAT_PROMPT = `You are a cooking assistant chatting with a home cook about the recipe below.
+Chat naturally and briefly, no preamble. Always reply in plain conversational sentences, never JSON.
 Write plain text only, no markdown symbols like ** or #. Use simple numbered lines for steps.
-Strict rule: only use the listed ingredients and basics, unless they tell you they have something else.`;
+Prefer what the cook has (their ingredients and basics).
+If what they ask needs something extra, don't refuse or ask whether they have it: answer directly,
+naming the extra ingredient, e.g. "If you have chilli flakes, add a pinch to the eggs in step 2."
+If they ask for a change, write out the revised steps.`;
 
 // ---------- tools ----------
 // A "tool" with a strict schema. We force Claude to call it, so its answer
@@ -247,8 +249,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     max_tokens: 2048,
     system:
       `${CHAT_PROMPT}\n\n` +
-      `Ingredients I have: ${body.ingredients.join(", ")}.\n` +
-      `Basics I always have: ${basics.join(", ")}.\n\n` +
+      `The user's ingredients: ${body.ingredients.join(", ")}.\n` +
+      `The user's basics: ${basics.join(", ")}.\n\n` +
       `Recipe (for reference only; never reply in JSON):\n${JSON.stringify(body.recipe)}`,
     messages: body.messages,
   });
