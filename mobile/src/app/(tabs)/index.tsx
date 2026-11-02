@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,32 +13,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getSuggestions } from "../../api/recipes";
-import { Suggestion } from "../../types/recipe";
+import { fetchIngredients, markIngredientsUsed, addIngredient as saveIngredient, Ingredient } from "@/api/server";
+import { Suggestion } from "@/types/recipe";
 import { useProfile } from "@/context/profile";
+import { useAuth } from "@/context/auth";
 
-// For now, ingredients live in memory and reset when the app reloads.
-// Later this list comes from SQLite (src/db/).
-type Ingredient = {
-  name: string;
-  useCount: number; // how often it's been used; drives the order
-};
-
-const STARTER_INGREDIENTS: Ingredient[] = [
-  { name: "Eggs", useCount: 1 },
-  { name: "Onion", useCount: 4 },
-  { name: "Garlic", useCount: 4 },
-  { name: "Rice", useCount: 3 },
-  { name: "Pasta", useCount: 3 },
-  { name: "Tinned tomatoes", useCount: 2 },
-  { name: "Cheddar", useCount: 2 },
-  { name: "Spinach", useCount: 1 },
-  { name: "Feta", useCount: 0 },
-];
 
 export default function IngredientsScreen() {
   const router = useRouter();
   const { profile } = useProfile();
-  const [ingredients, setIngredients] = useState<Ingredient[]>(STARTER_INGREDIENTS);
+  const { token } = useAuth();
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [lastIngredients, setLastIngredients] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [newItem, setNewItem] = useState("");
@@ -62,21 +47,26 @@ export default function IngredientsScreen() {
     });
   }
 
-  function addIngredient() {
-    const name = newItem.trim();
-    if (!name) return;
-
-    // Reuse the existing item if it's already there (case-insensitive).
-    const existing = ingredients.find(
-      (i) => i.name.toLowerCase() === name.toLowerCase()
-    );
-    const finalName = existing ? existing.name : name;
-
-    if (!existing) {
-      setIngredients((prev) => [...prev, { name: finalName, useCount: 0 }]);
+  async function refresh() {
+    if (!token) return;
+    try {
+      setIngredients(await fetchIngredients(token));
+    } catch (err) {
+      Alert.alert("Couldn't load ingredients", String(err));
     }
-    setSelected((prev) => new Set(prev).add(finalName));
+  }
+
+  useEffect(() => {
+    refresh();
+  }, [token]);
+
+  async function addIngredient() {
+    const name = newItem.trim();
+    if (!name || !token) return;
     setNewItem("");
+    await saveIngredient(token, name);
+    await refresh();
+    setSelected((prev) => new Set(prev).add(name));
   }
 
   async function suggestRecipe() {
@@ -87,11 +77,9 @@ export default function IngredientsScreen() {
 
     const chosen = [...selected];
     // Bump the use count of everything selected, so it moves up the list.
-    setIngredients((prev) =>
-      prev.map((i) =>
-        selected.has(i.name) ? { ...i, useCount: i.useCount + 1 } : i
-      )
-    );
+    if (token) {
+      markIngredientsUsed(token, chosen).then(refresh);
+    }
     setSelected(new Set());
 
     setLoading(true);
@@ -109,35 +97,35 @@ export default function IngredientsScreen() {
 
   if (suggestions !== null) {
     return (
-    <SafeAreaView style={styles.screen} edges={["top"]}>
-      <Text style={styles.title}>Suggestions</Text>
-      <ScrollView contentContainerStyle={styles.cardList}>
-        {suggestions.map((s, index) => (
-          <Pressable
-            key={index}
-            style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: "/recipe",
-                params: {
-                  suggestion: JSON.stringify(s),
-                  ingredients: JSON.stringify(lastIngredients),
-                },
-              })
-            }
-          >
-            <Text style={styles.cardTitle}>{s.title}</Text>
-            <Text style={styles.cardDescription}>{s.description}</Text>
-            <Text style={styles.cardMeta}>{s.minutes} min</Text>
+      <SafeAreaView style={styles.screen} edges={["top"]}>
+        <Text style={styles.title}>Suggestions</Text>
+        <ScrollView contentContainerStyle={styles.cardList}>
+          {suggestions.map((s, index) => (
+            <Pressable
+              key={index}
+              style={styles.card}
+              onPress={() =>
+                router.push({
+                  pathname: "/recipe",
+                  params: {
+                    suggestion: JSON.stringify(s),
+                    ingredients: JSON.stringify(lastIngredients),
+                  },
+                })
+              }
+            >
+              <Text style={styles.cardTitle}>{s.title}</Text>
+              <Text style={styles.cardDescription}>{s.description}</Text>
+              <Text style={styles.cardMeta}>{s.minutes} min</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        <View style={styles.footer}>
+          <Pressable style={styles.suggestButton} onPress={() => setSuggestions(null)}>
+            <Text style={styles.suggestText}>Back to ingredients</Text>
           </Pressable>
-        ))}
-      </ScrollView>
-      <View style={styles.footer}>
-        <Pressable style={styles.suggestButton} onPress={() => setSuggestions(null)}>
-          <Text style={styles.suggestText}>Back to ingredients</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView >
+        </View>
+      </SafeAreaView >
     );
   }
 
