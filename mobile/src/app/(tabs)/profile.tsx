@@ -10,12 +10,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useProfile } from "@/context/profile";
+import { useAuth } from "@/context/auth";
 
 const DIETS = ["Vegetarian", "Vegan", "Pescatarian", "Gluten-free"];
 
 export default function ProfileScreen() {
   const { profile, setProfile } = useProfile();
   const [newBasic, setNewBasic] = useState("");
+  const { username, signOut } = useAuth();
 
   function addBasic() {
     const name = newBasic.trim();
@@ -103,6 +105,12 @@ export default function ProfileScreen() {
           maxLength={500}
           textAlignVertical="top"
         />
+        <Text style={{ fontSize: 12, color: "#666666", marginTop: 4 }}>{profile.notes.length}/500</Text>
+
+        <Pressable style={styles.signOutButton} onPress={signOut}>
+          <Text style={styles.signOutButtonText}>Log out ({username})</Text>
+        </Pressable>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -141,5 +149,7 @@ const styles = StyleSheet.create({
   },
   addButton: { justifyContent: "center", paddingHorizontal: 16, borderRadius: 10, backgroundColor: "#1a1a1a" },
   addButtonText: { color: "#ffffff", fontWeight: "600" },
+  signOutButton: { alignSelf: "flex-start", marginTop: 24, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: "#b00020" },
+  signOutButtonText: { color: "#ffffff", fontWeight: "600" },
   notes: { minHeight: 120, marginTop: 8 },
 });
