@@ -33,6 +33,26 @@ export default function RecipeScreen() {
   const [sending, setSending] = useState(false);
   const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
+  // Cook mode: which method steps are ticked off. Local state only, nothing
+  // is saved — it resets when you leave the recipe.
+  const [doneSteps, setDoneSteps] = useState<Set<number>>(new Set());
+
+  function toggleStep(index: number) {
+    setDoneSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  }
+
+  function resetSteps() {
+    setDoneSteps(new Set());
+  }
+
   // Runs when the screen opens: ask the Worker for the full recipe.
   useEffect(() => {
     const suggestion = JSON.parse(params.suggestion) as Suggestion;
@@ -100,15 +120,34 @@ export default function RecipeScreen() {
         {recipe.ingredients.map((item, i) => (
           <Text key={i} style={styles.body}>• {item}</Text>
         ))}
- 
+
         <Text style={styles.heading}>Method</Text>
-        {recipe.steps.map((step, i) => (
-          <View key={i} style={styles.step}>
-            <Text style={styles.stepNumber}>{i + 1}</Text>
-            <Text style={[styles.body, styles.stepText]}>{step}</Text>
-          </View>
-        ))}
- 
+        {doneSteps.size > 0 && (
+          <Pressable onPress={resetSteps}>
+            <Text style={styles.resetText}>
+              {doneSteps.size} of {recipe.steps.length} done · Reset
+            </Text>
+          </Pressable>
+        )}
+        {recipe.steps.map((step, i) => {
+          const done = doneSteps.has(i);
+          return (
+            <Pressable
+              key={i}
+              style={styles.step}
+              onPress={() => toggleStep(i)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: done }}
+              accessibilityLabel={`Step ${i + 1}: ${step}`}
+            >
+              <Text style={[styles.stepNumber, done && styles.stepNumberDone]}>
+                {done ? "✓" : i + 1}
+              </Text>
+              <Text style={[styles.body, styles.stepText, done && styles.stepDone]}>{step}</Text>
+            </Pressable>
+          );
+        })}
+
         {messages.length > 0 && <Text style={styles.heading}>Chat</Text>}
         {messages.map((m, i) => (
           <View
@@ -120,7 +159,7 @@ export default function RecipeScreen() {
         ))}
         {sending && <ActivityIndicator style={styles.typing} />}
       </ScrollView>
- 
+
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -143,9 +182,10 @@ export default function RecipeScreen() {
     </KeyboardAvoidingView>
   );
 }
+
  
 const GREEN = "#2f7d4f";
- 
+
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: "#ffffff" },
   screen: { padding: 16, paddingBottom: 24 },
@@ -156,7 +196,10 @@ const styles = StyleSheet.create({
   body: { fontSize: 16, lineHeight: 24, color: "#1a1a1a" },
   step: { flexDirection: "row", gap: 12, marginBottom: 12 },
   stepNumber: { fontSize: 16, fontWeight: "700", color: GREEN, width: 20 },
+  stepNumberDone: { color: GREEN },
   stepText: { flex: 1 },
+  stepDone: { textDecorationLine: "line-through", color: "#8a8a8a" },
+  resetText: { fontSize: 14, color: GREEN, fontWeight: "600", marginBottom: 8 },
   muted: { fontSize: 15, color: "#666666" },
   error: { fontSize: 15, color: "#b00020", textAlign: "center" },
   bubble: { borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 8, maxWidth: "85%" },
