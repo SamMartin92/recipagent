@@ -125,7 +125,7 @@ export default function IngredientsScreen() {
             <Text style={styles.suggestText}>Back to ingredients</Text>
           </Pressable>
         </View>
-      </SafeAreaView >
+      </SafeAreaView>
     );
   }
 

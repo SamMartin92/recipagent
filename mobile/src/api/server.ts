@@ -1,5 +1,6 @@
 // Calls to the foodbrain server 
 // The Worker (recipes.ts) is separate: this server only stores user data.
+import { type Profile } from "@/types/profile";
 
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL!;
 
@@ -30,6 +31,19 @@ export function login(username: string) {
   return request<LoginResult>("/login", null, {
     method: "POST",
     body: JSON.stringify({ username }),
+  });
+}
+
+// ---------- Profile (per user) ----------
+
+export function fetchProfile(token: string) {
+  return request<Profile>("/me/profile", token);
+}
+
+export function saveProfile(token: string, profile: Profile) {
+  return request("/me/profile", token, {
+    method: "PUT",
+    body: JSON.stringify(profile),
   });
 }
 
