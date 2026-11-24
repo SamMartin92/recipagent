@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-import { login } from "@/api/server";
+import { login, setOnUnauthorized } from "@/api/server";
 
 // Who is logged in. The token is saved on the phone (encrypted by the OS),
 // so you stay logged in after closing the app.
@@ -44,6 +44,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUsername(null);
   }
+
+  // If the server ever rejects our token, log out, so the login screen appears.
+  useEffect(() => {
+    setOnUnauthorized(() => signOut());
+  }, []);
 
   return (
     <AuthContext.Provider value={{ token, username, loading, signIn, signOut }}>

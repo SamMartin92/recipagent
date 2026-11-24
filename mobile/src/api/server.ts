@@ -7,6 +7,12 @@ const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL!;
 export type LoginResult = { token: string; username: string };
 export type Ingredient = { name: string; useCount: number };
 
+// Called when the server rejects our token (e.g. the server's data was reset).
+let onUnauthorized: (() => void) | null = null;
+export function setOnUnauthorized(handler: () => void) {
+  onUnauthorized = handler;
+}
+
 // Shared helper: sends JSON, adds the token, and turns errors into exceptions.
 async function request<T>(path: string, token: string | null, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${SERVER_URL}${path}`, {
@@ -18,6 +24,9 @@ async function request<T>(path: string, token: string | null, options: RequestIn
   });
 
   const data = await response.json().catch(() => ({}));
+  if (response.status === 401 && token) {
+  onUnauthorized?.();
+}
   if (!response.ok) {
     throw new Error(data.error ?? `Server error ${response.status}`);
   }
