@@ -1,6 +1,7 @@
 // Calls to the foodbrain server 
 // The Worker (recipes.ts) is separate: this server only stores user data.
 import { type Profile } from "@/types/profile";
+import type { Recipe } from "@/types/recipe";
 
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL!;
 
@@ -77,4 +78,28 @@ export function markIngredientsUsed(token: string, names: string[]) {
     method: "POST",
     body: JSON.stringify({ names }),
   });
+}
+
+// ---------- Favourites (per user) ----------
+
+export type FavouriteSummary = { id: number; title: string; minutes: number };
+
+export async function fetchFavourites(token: string) {
+  const data = await request<{ favourites: FavouriteSummary[] }>("/me/favourites", token);
+  return data.favourites;
+}
+
+export function fetchFavourite(token: string, id: number) {
+  return request<{ id: number; recipe: Recipe; ingredients: string[] }>(`/me/favourites/${id}`, token);
+}
+
+export function addFavourite(token: string, recipe: Recipe, ingredients: string[]) {
+  return request<{ id: number }>("/me/favourites", token, {
+    method: "POST",
+    body: JSON.stringify({ recipe, ingredients }),
+  });
+}
+
+export function deleteFavourite(token: string, id: number) {
+  return request(`/me/favourites/${id}`, token, { method: "DELETE" });
 }

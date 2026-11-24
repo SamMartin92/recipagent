@@ -1,9 +1,9 @@
 
 import { DatabaseSync } from "node:sqlite";
- 
+
 // One SQLite file holds everything. Back it up by copying this file.
 export const db = new DatabaseSync(process.env.DB_PATH ?? "foodbrain.db");
- 
+
 // Create the tables the first time; does nothing if they already exist.
 db.exec(`
   PRAGMA foreign_keys = ON;
@@ -34,5 +34,13 @@ db.exec(`
     last_used_at TEXT,
     PRIMARY KEY (user_id, name)
   );
+
+  CREATE TABLE IF NOT EXISTS favourites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    title TEXT NOT NULL,
+    recipe TEXT NOT NULL,       -- the full recipe, as JSON
+    ingredients TEXT NOT NULL,  -- JSON: what you had when it was made (for the chat)
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
- 

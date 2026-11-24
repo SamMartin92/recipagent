@@ -118,6 +118,51 @@ app.post("/me/ingredients/used", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------- Favourites ----------
+
+// GET /me/favourites  ->  { favourites: [{ id, title, minutes }] }, newest first
+app.get("/me/favourites", (c) => {
+  const rows = db
+    .prepare("SELECT id, title, recipe FROM favourites WHERE user_id = ? ORDER BY id DESC")
+    .all(c.get("userId")) as { id: number; title: string; recipe: string }[];
+  return c.json({
+    favourites: rows.map((r) => ({ id: r.id, title: r.title, minutes: JSON.parse(r.recipe).minutes })),
+  });
+});
+
+// GET /me/favourites/:id  ->  { id, recipe, ingredients }
+app.get("/me/favourites/:id", (c) => {
+  const row = db
+    .prepare("SELECT id, recipe, ingredients FROM favourites WHERE id = ? AND user_id = ?")
+    .get(Number(c.req.param("id")), c.get("userId")) as
+    | { id: number; recipe: string; ingredients: string }
+    | undefined;
+  if (!row) return c.json({ error: "Not found" }, 404);
+  return c.json({ id: row.id, recipe: JSON.parse(row.recipe), ingredients: JSON.parse(row.ingredients) });
+});
+
+// POST /me/favourites  { recipe, ingredients }  ->  { id }
+app.post("/me/favourites", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const r = body?.recipe;
+  const ok =
+    r && typeof r.title === "string" && Array.isArray(r.steps) &&
+    Array.isArray(r.ingredients) && isStringList(body.ingredients);
+  if (!ok) return c.json({ error: 'Body must be { "recipe": {...}, "ingredients": [...] }' }, 400);
+
+  const result = db
+    .prepare("INSERT INTO favourites (user_id, title, recipe, ingredients) VALUES (?, ?, ?, ?)")
+    .run(c.get("userId"), r.title, JSON.stringify(r), JSON.stringify(body.ingredients));
+  return c.json({ id: Number(result.lastInsertRowid) });
+});
+
+// DELETE /me/favourites/:id  ->  { ok }
+app.delete("/me/favourites/:id", (c) => {
+  db.prepare("DELETE FROM favourites WHERE id = ? AND user_id = ?")
+    .run(Number(c.req.param("id")), c.get("userId"));
+  return c.json({ ok: true });
+});
+
 // ---------- Start ----------
 
 const port = Number(process.env.PORT ?? 3000);

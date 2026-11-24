@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   Pressable,
   ScrollView,
@@ -8,16 +8,29 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { router, useFocusEffect } from "expo-router";
 
 import { useProfile } from "@/context/profile";
 import { useAuth } from "@/context/auth";
+import { fetchFavourites, type FavouriteSummary } from "@/api/server";
 
 const DIETS = ["Vegetarian", "Vegan", "Pescatarian", "Gluten-free"];
 
 export default function ProfileScreen() {
   const { profile, setProfile } = useProfile();
   const [newBasic, setNewBasic] = useState("");
-  const { username, signOut } = useAuth();
+  const { username, token, signOut } = useAuth();
+  const [favourites, setFavourites] = useState<FavouriteSummary[]>([]);
+
+  // Reload every time this tab is shown, so newly saved recipes appear.
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      fetchFavourites(token)
+        .then(setFavourites)
+        .catch((err) => console.log("Couldn't load favourites:", err));
+    }, [token])
+  );
 
   function addBasic() {
     const name = newBasic.trim();
@@ -43,8 +56,8 @@ export default function ProfileScreen() {
   }
 
   function setNotes(notes: string) {
-  setProfile((prev) => ({ ...prev, notes }));
-}
+    setProfile((prev) => ({ ...prev, notes }));
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -111,6 +124,22 @@ export default function ProfileScreen() {
           <Text style={styles.signOutButtonText}>Log out ({username})</Text>
         </Pressable>
 
+        <Text style={styles.heading}>Favourites</Text>
+        {favourites.length === 0 ? (
+          <Text style={styles.hint}>Save a recipe to see it here.</Text>
+        ) : (
+          favourites.map((f) => (
+            <Pressable
+              key={f.id}
+              style={styles.favourite}
+              onPress={() => router.push({ pathname: "/recipe", params: { favouriteId: String(f.id) } })}
+            >
+              <Text style={styles.favouriteTitle}>{f.title}</Text>
+              <Text style={styles.favouriteMeta}>{f.minutes} min</Text>
+            </Pressable>
+          ))
+        )}
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -152,4 +181,7 @@ const styles = StyleSheet.create({
   signOutButton: { alignSelf: "flex-start", marginTop: 24, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10, backgroundColor: "#b00020" },
   signOutButtonText: { color: "#ffffff", fontWeight: "600" },
   notes: { minHeight: 120, marginTop: 8 },
+  favourite: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#eeeeee" },
+  favouriteTitle: { fontSize: 16, fontWeight: "600", color: "#1a1a1a" },
+  favouriteMeta: { fontSize: 13, color: GREEN, marginTop: 2 },
 });

@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import type { ComponentRef } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,13 +17,18 @@ import {
 import { getRecipe, sendChat } from "@/api/recipes";
 import type { ChatMessage, Recipe, Suggestion } from "@/types/recipe";
 import { useProfile } from "@/context/profile";
+import { useAuth } from "@/context/auth";
+import { addFavourite, deleteFavourite, fetchFavourite } from "@/api/server";
 
 // Opened from a suggestion card. Params arrive as strings, so the card and
 // ingredients are passed as JSON and parsed back here.
 export default function RecipeScreen() {
-  const params = useLocalSearchParams<{ suggestion: string; ingredients: string }>();
+  const params = useLocalSearchParams<{ suggestion: string; ingredients: string; favouriteId?: string }>();
+  const { token }= useAuth();
   const { profile } = useProfile();
-  const ingredients = JSON.parse(params.ingredients) as string[];
+  const [ingredients, setIngredients] = useState<string[]>([]);
+  const [savedId, setSavedId] = useState<number | null>(null);
+
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,25 +39,40 @@ export default function RecipeScreen() {
   const [sending, setSending] = useState(false);
   const scrollViewRef = useRef<ComponentRef<typeof ScrollView>>(null);
 
-  // Runs when the screen opens: ask the Worker for the full recipe.
-  useEffect(() => {
-    const suggestion = JSON.parse(params.suggestion) as Suggestion;
 
-    getRecipe(suggestion, ingredients, profile)
+  useEffect(() => {
+    // Opened from Favourites: load the saved copy, no LLM call needed.
+    if (params.favouriteId) {
+      if (!token) return;
+      fetchFavourite(token, Number(params.favouriteId))
+        .then((fav) => {
+          setRecipe(fav.recipe);
+          setIngredients(fav.ingredients);
+          setSavedId(fav.id);
+        })
+        .catch((err) => setError(String(err)));
+      return;
+    }
+
+    // Opened from a suggestion card: generate the recipe.
+    const suggestion = JSON.parse(params.suggestion!) as Suggestion;
+    const list = JSON.parse(params.ingredients!) as string[];
+    setIngredients(list);
+    getRecipe(suggestion, list, profile)
       .then(setRecipe)
       .catch((err) => setError(String(err)));
-  }, [params.suggestion, params.ingredients]);
+  }, [params.favouriteId, params.suggestion, params.ingredients, token]);
 
   async function send() {
     const text = input.trim();
     if (!text || !recipe || sending) return;
- 
+
     // The LLM remembers nothing, so we send the whole chat every time.
     const history: ChatMessage[] = [...messages, { role: "user", content: text }];
     setMessages(history);
     setInput("");
     setSending(true);
- 
+
     try {
       const reply = await sendChat(recipe, ingredients, profile, history);
       setMessages([...history, { role: "assistant", content: reply }]);
@@ -59,6 +80,21 @@ export default function RecipeScreen() {
       setMessages([...history, { role: "assistant", content: `Sorry, something went wrong: ${err}` }]);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function toggleFavourite() {
+    if (!token || !recipe) return;
+    try {
+      if (savedId) {
+        await deleteFavourite(token, savedId);
+        setSavedId(null);
+      } else {
+        const { id } = await addFavourite(token, recipe, ingredients);
+        setSavedId(id);
+      }
+    } catch (err) {
+      Alert.alert("Couldn't update favourites", String(err));
     }
   }
 
@@ -95,12 +131,14 @@ export default function RecipeScreen() {
         <Text style={styles.meta}>
           {recipe.minutes} min · serves {recipe.servings}
         </Text>
- 
+        <Pressable onPress={toggleFavourite} style={styles.saveButton}>
+          <Text style={styles.saveText}>{savedId ? "★ Saved" : "☆ Save to favourites"}</Text>
+        </Pressable>
         <Text style={styles.heading}>Ingredients</Text>
         {recipe.ingredients.map((item, i) => (
           <Text key={i} style={styles.body}>• {item}</Text>
         ))}
- 
+
         <Text style={styles.heading}>Method</Text>
         {recipe.steps.map((step, i) => (
           <View key={i} style={styles.step}>
@@ -108,7 +146,7 @@ export default function RecipeScreen() {
             <Text style={[styles.body, styles.stepText]}>{step}</Text>
           </View>
         ))}
- 
+
         {messages.length > 0 && <Text style={styles.heading}>Chat</Text>}
         {messages.map((m, i) => (
           <View
@@ -120,7 +158,7 @@ export default function RecipeScreen() {
         ))}
         {sending && <ActivityIndicator style={styles.typing} />}
       </ScrollView>
- 
+
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
@@ -143,9 +181,9 @@ export default function RecipeScreen() {
     </KeyboardAvoidingView>
   );
 }
- 
+
 const GREEN = "#2f7d4f";
- 
+
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: "#ffffff" },
   screen: { padding: 16, paddingBottom: 24 },
@@ -185,4 +223,6 @@ const styles = StyleSheet.create({
   sendButton: { justifyContent: "center", paddingHorizontal: 16, borderRadius: 10, backgroundColor: GREEN },
   sendText: { color: "#ffffff", fontWeight: "600" },
   disabled: { opacity: 0.4 },
+  saveButton: { alignSelf: "flex-start", marginTop: 12, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: GREEN },
+  saveText: { color: GREEN, fontWeight: "600", fontSize: 15 },
 });
