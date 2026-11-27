@@ -145,6 +145,9 @@ export default {
     if (request.method !== "POST") {
       return new Response("Send a POST request", { status: 405 });
     }
+    if (!(await isLoggedIn(env, request.headers.get("Authorization")))) {
+      return Response.json({ error: "Not logged in" }, { status: 401 });
+    }
     try {
       const path = new URL(request.url).pathname;
       if (path === "/suggest") return await handleSuggest(request, env);
@@ -276,6 +279,18 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response("Model returned no reply", { status: 502 });
   }
   return Response.json({ message });
+}
+
+async function isLoggedIn(env: Env, auth: string | null): Promise<boolean> {
+  if (!auth?.startsWith("Bearer ")) return false;
+  try {
+    const res = await fetch(`${env.SERVER_URL}/me/check`, {
+      headers: { Authorization: auth },
+    });
+    return res.ok;
+  } catch {
+    return false; //cannot reach pc, refuse
+  }
 }
 
 async function callLLM(env: Env, body: object): Promise<any> {
