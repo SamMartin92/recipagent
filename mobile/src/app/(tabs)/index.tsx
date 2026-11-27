@@ -70,6 +70,7 @@ export default function IngredientsScreen() {
   }
 
   async function suggestRecipe() {
+    if (!token) return;
     if (selected.size === 0) {
       Alert.alert("Pick some ingredients first");
       return;
@@ -85,7 +86,7 @@ export default function IngredientsScreen() {
     setLoading(true);
 
     try {
-      const list = await getSuggestions(chosen, profile);
+      const list = await getSuggestions(token, chosen, profile);
       setLastIngredients(chosen);
       setSuggestions(list);
     } catch (err) {

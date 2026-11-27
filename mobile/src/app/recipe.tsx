@@ -41,6 +41,7 @@ export default function RecipeScreen() {
 
 
   useEffect(() => {
+    if (!token) return;
     // Opened from Favourites: load the saved copy, no LLM call needed.
     if (params.favouriteId) {
       if (!token) return;
@@ -58,12 +59,13 @@ export default function RecipeScreen() {
     const suggestion = JSON.parse(params.suggestion!) as Suggestion;
     const list = JSON.parse(params.ingredients!) as string[];
     setIngredients(list);
-    getRecipe(suggestion, list, profile)
+    getRecipe(token, suggestion, list, profile)
       .then(setRecipe)
       .catch((err) => setError(String(err)));
   }, [params.favouriteId, params.suggestion, params.ingredients, token]);
 
   async function send() {
+    if (!token) return;
     const text = input.trim();
     if (!text || !recipe || sending) return;
 
@@ -74,7 +76,7 @@ export default function RecipeScreen() {
     setSending(true);
 
     try {
-      const reply = await sendChat(recipe, ingredients, profile, history);
+      const reply = await sendChat(token, recipe, ingredients, profile, history);
       setMessages([...history, { role: "assistant", content: reply }]);
     } catch (err) {
       setMessages([...history, { role: "assistant", content: `Sorry, something went wrong: ${err}` }]);
