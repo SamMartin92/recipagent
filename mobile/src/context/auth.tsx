@@ -10,7 +10,7 @@ type AuthValue = {
   token: string | null;
   username: string | null;
   loading: boolean; // true while reading the saved token at startup
-  signIn: (username: string) => Promise<void>;
+  signIn: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -30,8 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  async function signIn(name: string) {
-    const result = await login(name);
+  async function signIn(name: string, password: string) {
+    const result = await login(name, password);
     await SecureStore.setItemAsync("token", result.token);
     await SecureStore.setItemAsync("username", result.username);
     setToken(result.token);

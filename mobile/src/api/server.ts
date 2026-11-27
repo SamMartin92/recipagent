@@ -37,10 +37,10 @@ async function request<T>(path: string, token: string | null, options: RequestIn
 // ---------- Login ----------
 
 // Creates the account if the username is new. Returns a session token.
-export function login(username: string) {
+export function login(username: string, password: string) {
   return request<LoginResult>("/login", null, {
     method: "POST",
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, password }),
   });
 }
 

@@ -17,6 +17,7 @@ import { useAuth } from "@/context/auth";
 export default function LoginScreen() {
   const { signIn } = useAuth();
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +27,7 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
     try {
-      await signIn(name);
+      await signIn(name, password);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
@@ -40,7 +41,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <Text style={styles.title}>Welcome to foodbrɐin.</Text>
-        <Text style={styles.subtitle}>Enter your username</Text>
+        <Text style={styles.subtitle}>Enter your username and password</Text>
 
         <TextInput
           style={styles.input}
@@ -56,10 +57,23 @@ export default function LoginScreen() {
         />
         {error && <Text style={styles.error}>{error}</Text>}
 
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor="#8a8a8a"
+          value={password}
+          onChangeText={setPassword}
+          onSubmitEditing={submit}
+          autoCapitalize="none"
+          autoCorrect={false}
+          secureTextEntry
+          returnKeyType="go"
+          editable={!loading}
+        />
         <Pressable
-          style={[styles.button, (!username.trim() || loading) && styles.disabled]}
+          style={[styles.button, (!username.trim() || !password.trim() || loading) && styles.disabled]}
           onPress={submit}
-          disabled={!username.trim() || loading}
+          disabled={!username.trim() || !password.trim() || loading}
         >
           {loading ? (
             <ActivityIndicator color="#ffffff" />
@@ -98,4 +112,5 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.4 },
   buttonText: { color: "#ffffff", fontSize: 16, fontWeight: "600" },
+  passwordInput: { marginTop: 12 },
 });
