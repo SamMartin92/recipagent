@@ -100,6 +100,15 @@ app.put("/me/profile", async (c) => {
   return c.json({ ok: true });
 });
 
+// GET /me/check  ->  { ok, username }
+// Used by the Worker to confirm a token belongs to a logged-in user.
+app.get("/me/check", (c) => {
+  const user = db
+    .prepare("SELECT username FROM users WHERE id = ?")
+    .get(c.get("userId")) as { username: string };
+  return c.json({ ok: true, username: user.username });
+})
+
 // ---------- Ingredients ----------
 
 // GET /me/ingredients  ->  { ingredients: [{ name, useCount }] }, most-used first

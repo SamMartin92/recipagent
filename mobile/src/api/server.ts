@@ -3,7 +3,8 @@
 import { type Profile } from "@/types/profile";
 import type { Recipe } from "@/types/recipe";
 
-const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL!;
+// const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL!;
+const SERVER_URL = "https://ideal-space-parakeet-v7xjjg66jwrhww94-3000.app.github.dev"; // for local dev; the Worker uses the same URL
 
 export type LoginResult = { token: string; username: string };
 export type Ingredient = { name: string; useCount: number };
