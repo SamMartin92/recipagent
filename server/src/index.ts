@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 
 import { db } from "./db.js";
+import { checkPassword, hashPassword } from "./passwords.js";
 
 // userId is set by the session check below, for every /me/* route.
 const app = new Hono<{ Variables: { userId: number } }>();
@@ -15,23 +16,42 @@ const isStringList = (x: unknown): x is string[] =>
 // ---------- Log in (username only; creates the account if it's new) ----------
 
 // POST /login  { username }  ->  { token, username }
+// New username: creates the account. Existing: checks the password.
 app.post("/login", async (c) => {
   const body = await c.req.json().catch(() => null);
   const username = typeof body?.username === "string" ? body.username.trim() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+
   if (!/^[a-zA-Z0-9_-]{2,30}$/.test(username)) {
     return c.json({ error: "Username must be 2-30 letters, numbers, _ or -" }, 400);
   }
+  if (password.length < 6 || password.length > 100) {
+    return c.json({ error: "Password must be at least 6 characters" }, 400);
+  }
 
-  db.prepare("INSERT OR IGNORE INTO users (username) VALUES (?)").run(username);
-  const user = db
-    .prepare("SELECT id, username FROM users WHERE username = ?")
-    .get(username) as { id: number; username: string };
+  const existing = db
+    .prepare("SELECT id, username, password_hash FROM users WHERE username = ?")
+    .get(username) as { id: number; username: string; password_hash: string | null } | undefined;
 
-  // New users get a default profile.
-  db.prepare("INSERT OR IGNORE INTO profiles (user_id, basics, diets, notes) VALUES (?, ?, ?, ?)")
-    .run(user.id, JSON.stringify(DEFAULT_BASICS), "[]", "");
+  let user: { id: number; username: string };
 
-  // A random token the app sends back with every request.
+  if (!existing) {
+    // New username: create the account and a default profile.
+    const result = db
+      .prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)")
+      .run(username, hashPassword(password));
+    user = { id: Number(result.lastInsertRowid), username };
+
+    db.prepare("INSERT INTO profiles (user_id, basics, diets, notes) VALUES (?, ?, ?, ?)")
+      .run(user.id, JSON.stringify(DEFAULT_BASICS), "[]", "");
+  } else if (!existing.password_hash || !checkPassword(password, existing.password_hash)) {
+    // Existing username, wrong password.
+    return c.json({ error: "Wrong password for this username" }, 401);
+  } else {
+    user = existing;
+  }
+
+  // Same as before: a random token for the app to send with every request.
   const token = randomUUID();
   db.prepare("INSERT INTO sessions (token, user_id) VALUES (?, ?)").run(token, user.id);
 
@@ -44,8 +64,8 @@ app.use("/me/*", async (c, next) => {
   const token = c.req.header("Authorization")?.replace(/^Bearer /, "");
   const session = token
     ? (db.prepare("SELECT user_id FROM sessions WHERE token = ?").get(token) as
-        | { user_id: number }
-        | undefined)
+      | { user_id: number }
+      | undefined)
     : undefined;
 
   if (!session) return c.json({ error: "Not logged in" }, 401);
